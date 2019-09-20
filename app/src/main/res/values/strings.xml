@@ -1,4 +1,3 @@
 <resources>
-    <string name="app_name">IMDBApp</string>
-    <string name="read_more">Read More</string>
+    <string name="app_name">ImdbSearch</string>
 </resources>
