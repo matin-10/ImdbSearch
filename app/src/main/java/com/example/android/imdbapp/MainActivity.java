@@ -1,6 +1,9 @@
 package com.example.android.imdbapp;
 
 import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.LinearLayoutManager;
@@ -24,16 +27,22 @@ import org.json.JSONObject;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.ToDoubleBiFunction;
 
 import cz.msebera.android.httpclient.Header;
 import cz.msebera.android.httpclient.protocol.HTTP;
 
 public class MainActivity extends AppCompatActivity {
 
-     //String url = "https://www.omdbapi.com/?t=saw&apikey=d347e962" ;
+    //TODO CHECK IF A FILM EXICT , Dont add it any more
+    //TODO IF No Movie has been searched.dont save .clear current list
+
+
+
+    //String url = "https://www.omdbapi.com/?t=saw&apikey=d347e962" ;
 
     String BaseURL = "http://www.omdbapi.com/?apikey=d347e962";
-
+    List<Search> currentList = new ArrayList<>();
 
     RecyclerView recyclerViewMovies;
     @Override
@@ -41,7 +50,18 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        MySQLHelper mySQLHelper = new MySQLHelper(MainActivity.this, "dbMovies", null, 1);
+
         Button btSearch = findViewById(R.id.btnSearch);
+        Button btSave = findViewById(R.id.btnSave);
+        Button btnOffline = findViewById(R.id.btnOffline);
+        btnOffline.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent(MainActivity.this,OfflineMovies.class);
+                startActivity(intent);
+            }
+        });
         final EditText edtSearch = findViewById(R.id.edtSearch);
 
         recyclerViewMovies= findViewById(R.id.recyclerMovies);
@@ -63,10 +83,32 @@ public class MainActivity extends AppCompatActivity {
 
                     Search(sSearch);
                 }else{
-                     Toast.makeText(MainActivity.this, "Please Enter a Title", Toast.LENGTH_LONG).show();
+                    Toast.makeText(MainActivity.this, "Please Enter a Title", Toast.LENGTH_LONG).show();
                 }
             }
         });
+
+        btSave.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+
+                SaveToDb();
+
+
+            }
+        });
+
+        btSave.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                Intent intent=new Intent(MainActivity.this, OfflineMovies.class);
+                startActivity(intent);
+                return true;
+
+            }
+        });
+
+
     }
 
     public void Search(String sSearch){
@@ -78,13 +120,20 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onSuccess(int statusCode, Header[] headers, JSONObject response) {
                 super.onSuccess(statusCode, headers, response);
+                try {
 
-                Gson gson = new Gson();
-                MovieClass movieClass = gson.fromJson(response.toString(), MovieClass.class);
-                List<Search> search = movieClass.getSearch();
+                    String res = response.getString("Response");
+                    if (res.equalsIgnoreCase("True")) {
+                        Gson gson = new Gson();
+                        MovieClass movieClass = gson.fromJson(response.toString(), MovieClass.class);
+                        List<Search> search = movieClass.getSearch();
 
-                FillRecyclerView(search);
+                        FillRecyclerView(search);
+                    }
 
+                }catch (Exception e){
+
+                }
             }
 
             @Override
@@ -98,7 +147,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void FillRecyclerView(List<Search> search){
-
+        currentList = search;
 
         MovieRecyclerAdapter movieRecyclerAdapter = new MovieRecyclerAdapter(search, new MovieRecyclerAdapter.OnItemClickListener() {
             @Override
@@ -111,4 +160,50 @@ public class MainActivity extends AppCompatActivity {
         recyclerViewMovies.setLayoutManager(new LinearLayoutManager(MainActivity.this, RecyclerView.VERTICAL, false));
 
     }
+
+    public void SaveToDb(){
+
+        MySQLHelper mySQLHelper = new MySQLHelper(MainActivity.this, "dbMovies", null, 1);
+
+        int added = 0;
+        int updated = 0;
+        String title = "";
+        String msg = "";
+
+        if ( currentList.size()>0 ){
+
+            for (int i = 0; i < currentList.size(); i++) {
+                Search movie = currentList.get(i);
+                if (!mySQLHelper.isExist(movie.getImdbID())) {
+                    Log.i("MYTAG", "added");
+                    mySQLHelper.inserToDB(movie);
+                    added += 1;
+                }else{
+                    mySQLHelper.updateToDB(movie);
+                    updated+= 1;
+                }
+
+            }
+
+            AlertDialog alertDialog = new AlertDialog.Builder(MainActivity.this).create();
+            alertDialog.setTitle("Save Result");
+            alertDialog.setMessage("Database updated ! " + "\n" +
+                    "Rows Added= " +added + "\n" +
+                    "Rows Updated= " +updated );
+
+            alertDialog.setButton(AlertDialog.BUTTON_NEUTRAL, "OK",
+                    new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int which) {
+                            dialog.dismiss();
+                        }
+                    });
+            alertDialog.show();
+        }else{
+            Toast.makeText(MainActivity.this, "No Movie to add to Database", Toast.LENGTH_LONG).show();
+        }
+
+
+    }
+
+
 }
